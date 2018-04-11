@@ -14,6 +14,7 @@ def transform(data, label):
 
 # verbose: false default original data instead that choice batch of data random
 # batch : data batch size ,default 256
+# size :234*256 pictures
 def getDate(verbose=False, batch=256):
     mnist_train = gluon.data.vision.FashionMNIST(train=True, transform=transform)
     mnist_test = gluon.data.vision.FashionMNIST(train=False, transform=transform)

@@ -1,7 +1,7 @@
 from math import exp
 from mxnet import gluon
 from mxnet import autograd
-from mxnet import nd
+from mxnet import ndarray as nd
 from mxnet import image
 from mxnet.gluon import nn
 import mxnet as mx
@@ -115,7 +115,8 @@ def evaluate_accuracy(data_iterator, net, ctx=[mx.cpu()]):
     for batch in data_iterator:
         data, label, batch_size = _get_batch(batch, ctx)
         for X, y in zip(data, label):
-            acc += nd.sum(net(X).argmax(axis=1)==y).copyto(mx.cpu())
+            # acc += nd.sum(net(X).argmax(axis=1)==y).copyto(mx.cpu())
+            acc += nd.sum(nd.argmax(net(X), axis=1) == y).copyto(mx.cpu())
             n += y.size
         acc.wait_to_read() # don't push too many operators into backend
     return acc.asscalar() / n
