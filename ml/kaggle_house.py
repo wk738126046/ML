@@ -25,20 +25,31 @@ def getRmseLog(net, x_train, y_train):
 #         net.add(gluon.nn.Dense(1))
 #     net.initialize()# use BN
 #     return net
-# add hidden 256 and BN
+#### add hidden 256 and BN(my first net)
+# def getNet():
+#     net = gluon.nn.Sequential()
+#     with net.name_scope():
+#         # net.add(gluon.nn.BatchNorm())
+#         # net.add(gluon.nn.Dense(128,activation='relu'))
+#         net.add(gluon.nn.Dense(128))
+#         net.add(gluon.nn.BatchNorm(),
+#                 gluon.nn.Activation('relu'))
+#         # net.add(gluon.nn.Dropout(0.5))
+#         net.add(gluon.nn.Dense(1))
+#     net.initialize()  # use BN
+#     return net
+### second net
 def getNet():
     net = gluon.nn.Sequential()
     with net.name_scope():
         # net.add(gluon.nn.BatchNorm())
-        # net.add(gluon.nn.Dense(128,activation='relu'))
-        net.add(gluon.nn.Dense(128))
-        net.add(gluon.nn.BatchNorm(),
-                gluon.nn.Activation('relu'))
-        # net.add(gluon.nn.Dropout(0.5))
+        net.add(gluon.nn.Dense(1024, activation='relu'))
+        # net.add(gluon.nn.BatchNorm(),
+        #         gluon.nn.Activation('relu'))
+        net.add(gluon.nn.Dropout(0.5))
         net.add(gluon.nn.Dense(1))
     net.initialize()  # use BN
     return net
-
 
 def mytrain(net, x_train, y_train, x_test, y_test, epoches, verbose_epoch, lr, weight_decay):
     # net = getNet()
@@ -166,9 +177,9 @@ if __name__ == '__main__':
     learning_rate = 0.3
     weight_decay = 3.0
     #### local test
-    # train_loss, test_loss = kFoldCrossVaild(k, epochs, verbose_epoch, x_train,
-    #                                         y_train, learning_rate, weight_decay)
-    # print("%d-fold validation: Avg train loss: %f, Avg test loss: %f" %
-    #       (k, train_loss, test_loss))
+    train_loss, test_loss = kFoldCrossVaild(k, epochs, verbose_epoch, x_train,
+                                            y_train, learning_rate, weight_decay)
+    print("%d-fold validation: Avg train loss: %f, Avg test loss: %f" %
+          (k, train_loss, test_loss))
     ### generate assess file
-    learn(epochs, verbose_epoch, x_train, y_train, test, learning_rate, weight_decay)
+    # learn(epochs, verbose_epoch, x_train, y_train, test, learning_rate, weight_decay)
