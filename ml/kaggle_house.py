@@ -46,7 +46,7 @@ def getNet():
         net.add(gluon.nn.Dense(1024, activation='relu'))
         # net.add(gluon.nn.BatchNorm(),
         #         gluon.nn.Activation('relu'))
-        net.add(gluon.nn.Dropout(0.5))
+        net.add(gluon.nn.Dropout(0.6))
         net.add(gluon.nn.Dense(1))
     net.initialize()  # use BN
     return net
@@ -67,6 +67,9 @@ def mytrain(net, x_train, y_train, x_test, y_test, epoches, verbose_epoch, lr, w
     train_loss = 0
     kaggle_train_loss = 0
     for e in range(epoches):
+        # if e > 30:
+        #     lr = lr*0.9
+        #     trainer = gluon.Trainer(net.collect_params(), 'adam', {'learning_rate': lr, 'wd': weight_decay})
         for data, label in dataIter_train:
             with autograd.record():
                 out = net(data)
@@ -172,14 +175,16 @@ if __name__ == '__main__':
     square_loss = gluon.loss.L2Loss()
     # assess results of kaggle
     k = 5
-    epochs = 100
-    verbose_epoch = 95
-    learning_rate = 0.3
-    weight_decay = 3.0
+    epochs = 50
+    verbose_epoch = 45
+    learning_rate = 0.03
+    weight_decay = 170
     #### local test
-    train_loss, test_loss = kFoldCrossVaild(k, epochs, verbose_epoch, x_train,
-                                            y_train, learning_rate, weight_decay)
-    print("%d-fold validation: Avg train loss: %f, Avg test loss: %f" %
-          (k, train_loss, test_loss))
+    if 0:
+        train_loss, test_loss = kFoldCrossVaild(k, epochs, verbose_epoch, x_train,
+                                                y_train, learning_rate, weight_decay)
+        print("%d-fold validation: Avg train loss: %f, Avg test loss: %f" %
+              (k, train_loss, test_loss))
     ### generate assess file
-    # learn(epochs, verbose_epoch, x_train, y_train, test, learning_rate, weight_decay)
+    else:
+        learn(epochs, verbose_epoch, x_train, y_train, test, learning_rate, weight_decay)
