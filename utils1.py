@@ -108,15 +108,18 @@ def _get_batch(batch, ctx):
 def evaluate_accuracy(data_iterator, net, ctx=[mx.cpu()]):
     if isinstance(ctx, mx.Context):
         ctx = [ctx]
+        # print(ctx)
     acc = nd.array([0])
     n = 0.
     if isinstance(data_iterator, mx.io.MXDataIter):
         data_iterator.reset()
     for batch in data_iterator:
         data, label, batch_size = _get_batch(batch, ctx)
+        # label1 = nd.array(label).astype('float32')
         for X, y in zip(data, label):
             # acc += nd.sum(net(X).argmax(axis=1)==y).copyto(mx.cpu())
             acc += nd.sum(nd.argmax(net(X), axis=1) == y).copyto(mx.cpu())
+            # acc += nd.sum(nd.argmax(net(X), axis=1) == y)
             n += y.size
         acc.wait_to_read() # don't push too many operators into backend
     return acc.asscalar() / n
