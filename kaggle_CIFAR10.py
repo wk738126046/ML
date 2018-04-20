@@ -18,6 +18,7 @@ import shutil
 import numpy as np
 import datetime
 import matplotlib.pyplot as plt
+import netlib
 
 
 # 1.get data: trainlabel.csv contexts are image_id,label[:],size(n,2)
@@ -166,6 +167,12 @@ def getMyNet(ctx):
     return net
 
 
+def getResNet164_v2(ctx, verbose=False):
+    num_outputs = 10
+    net = netlib.ResNet164_v2(num_outputs, verbose)
+    net.initialize(ctx=ctx, init=init.Xavier())
+    return net
+
 # 4.train
 def myTrain(net, batch_size, train_data, valid_data, epoches, lr, wd, ctx, lr_period, lr_decay, verbose=False):
     trainer = mx.gluon.Trainer(net.collect_params(), 'sgd', {'learning_rate': lr, 'momentum': 0.9, 'wd': wd})
@@ -177,9 +184,9 @@ def myTrain(net, batch_size, train_data, valid_data, epoches, lr, wd, ctx, lr_pe
     for e in range(epoches):
         train_loss = 0.0
         train_acc = 0.0
-        # if e > 0 and e % lr_period == 0 and e < 41:
-        #     trainer.set_learning_rate(trainer.learning_rate * lr_decay)# decrease lr
-        if e > 160 and e % 40 == 0:
+        if e > 99 and e < 251 and e % 10 == 0:
+            trainer.set_learning_rate(trainer.learning_rate * lr_decay)  # decrease lr
+        if e == 260:
             trainer.set_learning_rate(trainer.learning_rate * lr_decay)  # decrease lr
         # print('train len:',len(train_data))
         for data, label in train_data:
@@ -299,8 +306,8 @@ if __name__ == '__main__':
     valid_ratio = 0.1
     num_epochs = 300
     learning_rate = 0.1
-    weight_decay = 0.0005
-    lr_period = 40
+    weight_decay = 0.004
+    lr_period = 10
     lr_decay = 0.5
     label_file = 'trainLabels.csv'
     input_dir = 'train_valid_test'
@@ -321,7 +328,10 @@ if __name__ == '__main__':
     train_valid_ds = vision.ImageFolderDataset(input_str + 'train_valid', flag=1)
     test_ds = vision.ImageFolderDataset(input_str + 'test', flag=1)
 
+    # data augmentation
     transform_train, transform_test = enhanceDataFuc()
+    # transform_train = netlib.transform_train()
+
     loader = mx.gluon.data.DataLoader
     train_data = loader(train_ds.transform_first(transform_train), batch_size=batch_size, shuffle=True,
                         last_batch='keep')
@@ -338,7 +348,8 @@ if __name__ == '__main__':
 
     # 2.model and init
     ctx = utils1.try_gpu()
-    net = getMyNet(ctx)
+    # net = getMyNet(ctx)
+    net = getResNet164_v2(ctx)
 
     net.hybridize()
 
@@ -347,31 +358,31 @@ if __name__ == '__main__':
 
     # trainer = mx.gluon.Trainer(net.collect_params(),'sgd',{'learning_rate':lr,'momentum':0.9,'wd':wd})
     ## check net
-    # x = nd.random_normal(shape=(4,3,32,32),ctx=ctx)
-    # out = net(x)
+    x = nd.random_normal(shape=(4, 3, 32, 32), ctx=ctx)
+    out = net(x)
     # print(net.collect_params())
-    # print(net)
+    print(net)
     preds = []
     num = 0
     if True:
         # myTrain(net,batch_size,train_data,valid_data,num_epochs,learning_rate,weight_decay,ctx,lr_period,lr_decay,False)
         # myTrain(net,batch_size,train_data,valid_data,num_epochs,learning_rate,weight_decay,ctx,lr_period,lr_decay,True)
         print('--demo--train--end---')
-        net.save_params('./CIFAR10_TrainParam.params')
+        # net.save_params('./CIFAR10_TrainParam.params')
         # net.load_params('./CIFAR10_TrainParam.params',ctx) # read net weights
         print('--save params completed! start detect in kaggle test data--')
-        for data, label in test_data:
-            num += 1
-            if num % 100 == 0:
-                print('test data batch detect process:', num)
-            output = net(data.as_in_context(ctx))
-            preds.extend(nd.argmax(output, axis=1).astype(int).asnumpy())
-        sorted_ids = list(range(1, len(test_ds) + 1))
-        sorted_ids.sort(key=lambda x: str(x))
-
-        df = pd.DataFrame({'id': sorted_ids, 'label': preds})
-        df['label'] = df['label'].apply(lambda x: train_valid_ds.synsets[x])
-        df.to_csv('./submissions_CIFAR/submission.csv', index=False)
+        # for data, label in test_data:
+        #     num += 1
+        #     if num % 100 == 0:
+        #         print('test data batch detect process:', num)
+        #     output = net(data.as_in_context(ctx))
+        #     preds.extend(nd.argmax(output, axis=1).astype(int).asnumpy())
+        # sorted_ids = list(range(1, len(test_ds) + 1))
+        # sorted_ids.sort(key=lambda x: str(x))
+        #
+        # df = pd.DataFrame({'id': sorted_ids, 'label': preds})
+        # df['label'] = df['label'].apply(lambda x: train_valid_ds.synsets[x])
+        # df.to_csv('./submissions_CIFAR/submission2.csv', index=False)
 
         print('---end---')
         '''
