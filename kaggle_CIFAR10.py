@@ -79,7 +79,7 @@ def enhanceDataFuc():
         # transforms.RandomLighting(0.0),
         # transforms.Cast('float32'),
         # transforms.Resize(32),
-        # random crop scale/ratio
+        # random crop scale/ratios
         transforms.RandomResizedCrop(32, scale=(0.08, 1.0), ratio=(3.0 / 4.0, 4.0 / 3.0)),
         # random tranverse on left or right
         transforms.RandomFlipLeftRight(),
@@ -122,7 +122,7 @@ class Residual(nn.HybridBlock):
 class MyResnet18(nn.HybridBlock):
     def __init__(self, num_classes, verbose=False, **kwargs):
         super(MyResnet18, self).__init__(**kwargs)
-        self.verbose = False
+        self.verbose = verbose
         with self.name_scope():
             net = self.net = nn.HybridSequential()
             # block1(drop maxpool)
@@ -162,7 +162,7 @@ class MyResnet18(nn.HybridBlock):
 
 def getMyNet(ctx):
     num_outputs = 10
-    net = MyResnet18(num_outputs, verbose=True)
+    net = MyResnet18(num_outputs)
     net.initialize(ctx=ctx, init=init.Xavier())
     return net
 
@@ -170,6 +170,13 @@ def getMyNet(ctx):
 def getResNet164_v2(ctx, verbose=False):
     num_outputs = 10
     net = netlib.ResNet164_v2(num_outputs, verbose)
+    net.initialize(ctx=ctx, init=init.Xavier())
+    return net
+
+
+def getWRN16_8(ctx):
+    num_outputs = 10
+    net = netlib.WideResnet_16_8(num_outputs)
     net.initialize(ctx=ctx, init=init.Xavier())
     return net
 
@@ -184,13 +191,21 @@ def myTrain(net, batch_size, train_data, valid_data, epoches, lr, wd, ctx, lr_pe
     for e in range(epoches):
         train_loss = 0.0
         train_acc = 0.0
-        if e > 99 and e < 251 and e % 10 == 0:
+        # if e > 99 and e < 251 and e % 10 == 0:
+        #     trainer.set_learning_rate(trainer.learning_rate * lr_decay)  # decrease lr
+        if e == 60 or e == 120 or e == 160:
             trainer.set_learning_rate(trainer.learning_rate * lr_decay)  # decrease lr
-        if e == 260:
-            trainer.set_learning_rate(trainer.learning_rate * lr_decay)  # decrease lr
+        # if e > 150 and e % 20 == 0:
+        #     trainer.set_learning_rate(trainer.learning_rate * lr_decay)  # decrease
         # print('train len:',len(train_data))
+        train_acc_old = 0
+        b = 0
         for data, label in train_data:
             # print('label type:', label.dtype)
+            # print('data type:', data)
+            # print(len(train_data))
+            b += 1
+            label = label.reshape(shape=(label.shape[0],))  # be careful:it turns to vector
             label = label.astype('float32').as_in_context(ctx)
             with autograd.record():
                 output = net(data.as_in_context(ctx))
@@ -199,6 +214,9 @@ def myTrain(net, batch_size, train_data, valid_data, epoches, lr, wd, ctx, lr_pe
             trainer.step(batch_size)
             train_loss += nd.mean(loss).asscalar()
             train_acc += utils1.accuracy(output, label)
+            # print('time: %d, acc:%f'%(b,train_acc - train_acc_old))
+            # train_acc_old = train_acc
+
         train_loss_record.append(train_loss / len(train_data))
         train_acc_record.append(train_acc / len(train_data))
         cur_time = datetime.datetime.now()
@@ -208,11 +226,13 @@ def myTrain(net, batch_size, train_data, valid_data, epoches, lr, wd, ctx, lr_pe
         if valid_data is not None:
             valid_acc = evaluate_accuracy(valid_data, net, ctx)
             valid_acc_record.append(valid_acc)
+            print(len(valid_data))
             if verbose:
                 ###valid data loss
                 valid_loss = 0
                 # print('valid_data len', len(valid_data))
                 for data, valid_label in valid_data:
+                    valid_label = valid_label.reshape(shape=(valid_label.shape[0],))  # be careful:it turns to vector
                     valid_label = valid_label.astype('float32').as_in_context(ctx)
                     # with autograd.predict_mode():
                     out = net(data.as_in_context(ctx))
@@ -296,19 +316,19 @@ if __name__ == '__main__':
     if demo:
         train_dir = 'train_tiny'
         test_dir = 'test_tiny'
-        batch_size = 128
+        batch_size = 32
         data_dir = './CIFAR-10-kaggleData'
     else:
         train_dir = 'train'
         test_dir = 'test'
-        batch_size = 128
+        batch_size = 32
         data_dir = './CIFAR-10-kaggleData/CompleteData_CIFAR10'
-    valid_ratio = 0.1
-    num_epochs = 300
-    learning_rate = 0.1
-    weight_decay = 0.004
-    lr_period = 10
-    lr_decay = 0.5
+    # valid_ratio = 0.1
+    # num_epochs = 300
+    # learning_rate = 0.1
+    # weight_decay = 0.001
+    # lr_period = 40
+    # lr_decay = 0.5
     label_file = 'trainLabels.csv'
     input_dir = 'train_valid_test'
     # print('train dir:',os.path.join(data_dir,train_dir))
@@ -319,37 +339,68 @@ if __name__ == '__main__':
     # 1.1 classify dataset
     # reorganizeCIFAR10Data(data_dir,label_file,train_dir,test_dir,input_dir,valid_ratio)
 
-    # 1.2 enhance image
+    # 1.2 data augmentation
     input_str = data_dir + '/' + input_dir + '/'
-    # print('input dir:',input_str)
-    # read original images, flag = 1 mean RGB
-    train_ds = vision.ImageFolderDataset(input_str + 'train', flag=1)
-    valid_ds = vision.ImageFolderDataset(input_str + 'valid', flag=1)
-    train_valid_ds = vision.ImageFolderDataset(input_str + 'train_valid', flag=1)
-    test_ds = vision.ImageFolderDataset(input_str + 'test', flag=1)
-
-    # data augmentation
-    transform_train, transform_test = enhanceDataFuc()
-    # transform_train = netlib.transform_train()
-
     loader = mx.gluon.data.DataLoader
-    train_data = loader(train_ds.transform_first(transform_train), batch_size=batch_size, shuffle=True,
-                        last_batch='keep')
+    UseMyDA = True
+    # UseMyDA = False
+    if UseMyDA:
+        # modify valid data type
+        transform_train1, transform_test1 = enhanceDataFuc()
+        train_ds = vision.ImageFolderDataset(input_str + 'train', flag=1, transform=netlib.transform_train)
+        # valid_ds = vision.ImageFolderDataset(input_str + 'valid', flag=1,transform=netlib.transform_test)
+        valid_ds = vision.ImageFolderDataset(input_str + 'valid', flag=1)
+        train_valid_ds = vision.ImageFolderDataset(input_str + 'train_valid', flag=1, transform=netlib.transform_train)
+        test_ds = vision.ImageFolderDataset(input_str + 'test', flag=1, transform=netlib.transform_test)
 
-    valid_data = loader(valid_ds.transform_first(transform_test), batch_size=batch_size, shuffle=True,
-                        last_batch='keep')
-    # verify loss of valid data
-    # valid_test_data = loader(valid_ds.transform_first(transform_test),batch_size=batch_size,shuffle=False,last_batch='keep')
+        train_data = loader(train_ds, batch_size=batch_size, shuffle=True, last_batch='keep')
 
-    train_valid_data = loader(train_valid_ds.transform_first(transform_train), batch_size=batch_size, shuffle=True,
-                              last_batch='keep')
+        valid_data = loader(valid_ds.transform_first(transform_test1), batch_size=batch_size, shuffle=True,
+                            last_batch='keep')
+        # verify loss of valid data
+        train_valid_data = loader(train_valid_ds, batch_size=batch_size, shuffle=True, last_batch='keep')
 
-    test_data = loader(test_ds.transform_first(transform_test), batch_size=batch_size, shuffle=False, last_batch='keep')
+        test_data = loader(test_ds, batch_size=batch_size, shuffle=False, last_batch='keep')
+        print('len valid data:', len(valid_data))
+
+    else:  # use only randomSizeClip
+        # print('input dir:',input_str)
+        # read original images, flag = 1 mean RGB
+        train_ds = vision.ImageFolderDataset(input_str + 'train', flag=1)
+        valid_ds = vision.ImageFolderDataset(input_str + 'valid', flag=1)
+        train_valid_ds = vision.ImageFolderDataset(input_str + 'train_valid', flag=1)
+        test_ds = vision.ImageFolderDataset(input_str + 'test', flag=1)
+
+        # data augmentation
+        transform_train, transform_test = enhanceDataFuc()
+
+        train_data = loader(train_ds.transform_first(transform_train), batch_size=batch_size, shuffle=True,
+                            last_batch='keep')
+
+        valid_data = loader(valid_ds.transform_first(transform_test), batch_size=batch_size, shuffle=True,
+                            last_batch='keep')
+        print('len valid data:', len(valid_data))
+        # verify loss of valid data
+        # valid_test_data = loader(valid_ds.transform_first(transform_test),batch_size=batch_size,shuffle=False,last_batch='keep')
+
+        train_valid_data = loader(train_valid_ds.transform_first(transform_train), batch_size=batch_size, shuffle=True,
+                                  last_batch='keep')
+
+        test_data = loader(test_ds.transform_first(transform_test), batch_size=batch_size, shuffle=False,
+                           last_batch='keep')
 
     # 2.model and init
     ctx = utils1.try_gpu()
     # net = getMyNet(ctx)
-    net = getResNet164_v2(ctx)
+    # net = getResNet164_v2(ctx)
+    net = getWRN16_8(ctx)
+
+    valid_ratio = 0.1
+    num_epochs = 300
+    learning_rate = 0.1
+    weight_decay = 0.0005
+    lr_period = 40
+    lr_decay = 0.2
 
     net.hybridize()
 
@@ -358,31 +409,32 @@ if __name__ == '__main__':
 
     # trainer = mx.gluon.Trainer(net.collect_params(),'sgd',{'learning_rate':lr,'momentum':0.9,'wd':wd})
     ## check net
-    x = nd.random_normal(shape=(4, 3, 32, 32), ctx=ctx)
-    out = net(x)
+    # x = nd.random_normal(shape=(4, 3, 32, 32), ctx=ctx)
+    # out = net(x)
     # print(net.collect_params())
-    print(net)
+    # print(net)
     preds = []
     num = 0
     if True:
-        # myTrain(net,batch_size,train_data,valid_data,num_epochs,learning_rate,weight_decay,ctx,lr_period,lr_decay,False)
+        myTrain(net, batch_size, train_data, valid_data, num_epochs, learning_rate, weight_decay, ctx, lr_period,
+                lr_decay, False)
         # myTrain(net,batch_size,train_data,valid_data,num_epochs,learning_rate,weight_decay,ctx,lr_period,lr_decay,True)
         print('--demo--train--end---')
-        # net.save_params('./CIFAR10_TrainParam.params')
+        net.save_params('./CIFAR10_TrainParam.params')
         # net.load_params('./CIFAR10_TrainParam.params',ctx) # read net weights
         print('--save params completed! start detect in kaggle test data--')
-        # for data, label in test_data:
-        #     num += 1
-        #     if num % 100 == 0:
-        #         print('test data batch detect process:', num)
-        #     output = net(data.as_in_context(ctx))
-        #     preds.extend(nd.argmax(output, axis=1).astype(int).asnumpy())
-        # sorted_ids = list(range(1, len(test_ds) + 1))
-        # sorted_ids.sort(key=lambda x: str(x))
-        #
-        # df = pd.DataFrame({'id': sorted_ids, 'label': preds})
-        # df['label'] = df['label'].apply(lambda x: train_valid_ds.synsets[x])
-        # df.to_csv('./submissions_CIFAR/submission2.csv', index=False)
+        for data, label in test_data:
+            num += 1
+            if num % 100 == 0:
+                print('test data batch detect process:', num)
+            output = net(data.as_in_context(ctx))
+            preds.extend(nd.argmax(output, axis=1).astype(int).asnumpy())
+        sorted_ids = list(range(1, len(test_ds) + 1))
+        sorted_ids.sort(key=lambda x: str(x))
+
+        df = pd.DataFrame({'id': sorted_ids, 'label': preds})
+        df['label'] = df['label'].apply(lambda x: train_valid_ds.synsets[x])
+        df.to_csv('./submissions_CIFAR/submission.csv', index=False)
 
         print('---end---')
         '''

@@ -54,7 +54,7 @@ class Residual_v2_bottleneck(nn.HybridBlock):
             # self.bn4 = nn.BatchNorm()
 
             if not same_shape:
-                self.conv4 = nn.Conv2D(channels, 1, strides=strides, use_bias=False)
+                self.conv4 = nn.Conv2D(channels, 1, strides=strides)
 
     def hybrid_forward(self, F, x):
         out = self.conv1(F.relu(self.bn1(x)))
@@ -246,22 +246,83 @@ import numpy as np
 def transform_train(data, label):
     im = data.asnumpy()
     im = np.pad(im, ((4, 4), (4, 4), (0, 0)), mode='constant', constant_values=0)
-    im = nd.array(im, dtype='float32') / 255
+    im = nd.array(im, dtype='float32') / 255.0
     auglist = image.CreateAugmenter(data_shape=(3, 32, 32), resize=0, rand_mirror=True,
                                     rand_crop=True,
                                     mean=np.array([0.4914, 0.4822, 0.4465]),
                                     std=np.array([0.2023, 0.1994, 0.2010]))
     for aug in auglist:
         im = aug(im)
-    im = nd.transpose(im, (2, 0, 1))  # channel x width x height
+    im = nd.transpose(im, (2, 0, 1))  # channel x height x weight
     return im, nd.array([label]).astype('float32')
 
 
 def transform_test(data, label):
-    im = data.astype('float32') / 255
+    im = data.astype('float32') / 255.0
     auglist = image.CreateAugmenter(data_shape=(3, 32, 32), mean=np.array([0.4914, 0.4822, 0.4465]),
                                     std=np.array([0.2023, 0.1994, 0.2010]))
     for aug in auglist:
         im = aug(im)
     im = nd.transpose(im, (2, 0, 1))
     return im, nd.array([label]).astype('float32')
+
+
+'''
+    Wide Residual Network(WRN16*8)
+'''
+
+
+class wrnResidual(nn.HybridBlock):
+    def __init__(self, channels, same_shape=True, equalChannel=True, **kwargs):
+        super(wrnResidual, self).__init__(**kwargs)
+        self.same_shape = same_shape
+        self.equalChannel = equalChannel
+        self.strides = 1 if same_shape else 2
+        # net = self.net = nn.HybridSequential()
+        with self.name_scope():
+            self.bn1 = nn.BatchNorm()
+            self.conv1 = nn.Conv2D(channels=channels, kernel_size=3, padding=1, strides=self.strides)
+            self.bn2 = nn.BatchNorm()
+            self.conv2 = nn.Conv2D(channels=channels, kernel_size=3, strides=1, padding=1)
+            if (not self.same_shape) or (not self.equalChannel):
+                self.conv3 = nn.Conv2D(channels=channels, kernel_size=1, strides=self.strides)
+
+    def hybrid_forward(self, F, x):
+        out = self.conv1(F.relu(self.bn1(x)))
+        out = self.conv2(F.relu(self.bn2(out)))
+        if (not self.same_shape) or (not self.equalChannel):
+            x = self.conv3(x)
+        return out + x
+
+
+class WideResnet_16_8(nn.HybridBlock):
+    def __init__(self, num_classes, **kwargs):
+        super(WideResnet_16_8, self).__init__(**kwargs)
+        net = self.net = nn.HybridSequential()
+        net.add(
+            nn.Conv2D(channels=16, kernel_size=3, strides=1, padding=1),
+            # block1
+            wrnResidual(channels=16 * 8, equalChannel=False),
+            wrnResidual(channels=16 * 8),
+            wrnResidual(channels=16 * 8),
+            # block2
+            wrnResidual(channels=32 * 8, same_shape=False),
+            wrnResidual(channels=32 * 8),
+            wrnResidual(channels=32 * 8),
+            # block3
+            wrnResidual(channels=64 * 8, same_shape=False),
+            wrnResidual(channels=64 * 8),
+            wrnResidual(channels=64 * 8),
+            # out
+            nn.BatchNorm(),
+            nn.Activation('relu'),
+            nn.AvgPool2D(pool_size=(8, 8)),
+            nn.Flatten(),
+            nn.Dense(num_classes)
+        )
+
+    def hybrid_forward(self, F, x):
+        out = x
+        for i, b in enumerate(self.net):
+            out = b(out)
+        return out

@@ -53,7 +53,13 @@
     
 ``` 
 Epoch 299. Train Loss: 0.286618, Train acc 0.904632, Valid acc 0.933200, lr=0.00078125,
-
+```text
+    the same params with 3.1.1 .Score is 0.9439 that only add data augmentation
+    step: 1) pad to (40,40)
+          2) horizontal flip to image with probability 0.5
+          3) random cropping other than center crop 
+          4) normalization 
+```
 
 reference:
 https://github.com/SinyerAtlantis/deep_learning_gluon/tree/master/2.%20cnn_cifar10
