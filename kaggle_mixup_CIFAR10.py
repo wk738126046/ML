@@ -173,6 +173,7 @@ def getResNet164_v2(ctx, verbose=False):
     net.initialize(ctx=ctx, init=init.Xavier())
     return net
 
+
 def getWRN16_8(ctx):
     num_outputs = 10
     net = netlib.WideResnet_16_8(num_outputs)
@@ -186,6 +187,7 @@ def getResNeXt18(ctx):
     net.initialize(ctx=ctx, init=init.Xavier())
     return net
 
+
 # 4.train
 def myTrain(net, batch_size, train_data, valid_data, epoches, lr, wd, ctx, lr_period, lr_decay, verbose=False):
     trainer = mx.gluon.Trainer(net.collect_params(), 'sgd', {'learning_rate': lr, 'momentum': 0.9, 'wd': wd})
@@ -198,20 +200,19 @@ def myTrain(net, batch_size, train_data, valid_data, epoches, lr, wd, ctx, lr_pe
     for e in range(epoches):
         train_loss = 0.0
         train_acc = 0.0
-        # if e > 99 and e < 251 and e % 10 == 0:
-        #     trainer.set_learning_rate(trainer.learning_rate * lr_decay)  # decrease lr
-        # if e == 60 or e == 120 or e == 160:
-        #     trainer.set_learning_rate(trainer.learning_rate * lr_decay)  # decrease lr
         if e > 150 and e % 20 == 0:
             trainer.set_learning_rate(trainer.learning_rate * lr_decay)  # decrease
         # print('train len:',len(train_data))
         for data, label in train_data:
             label = label.reshape(shape=(label.shape[0],))  # be careful:it turns to vector
             label = label.astype('float32').as_in_context(ctx)
+            mixup_data, label, mixup_label, lamda = netlib.mixup(data, label)
             with autograd.record():
-                output = net(data.as_in_context(ctx))
-                loss = softmax_cross_entrory(output, label)  #
-                # loss = focalloss(output, label)# focal loss
+                output = net(mixup_data.as_in_context(ctx))
+                # loss = softmax_cross_entrory(output, label)#
+                # 1 test CE +mixup 2:test focal + mixup
+                loss_func = netlib.mixup_loss(label, mixup_label, lamda)
+                loss = loss_func(softmax_cross_entrory, output)
             loss.backward()
             trainer.step(batch_size)
             train_loss += nd.mean(loss).asscalar()
@@ -243,8 +244,9 @@ def myTrain(net, batch_size, train_data, valid_data, epoches, lr, wd, ctx, lr_pe
 
                 epoch_str = ("Epoch %d. Train Loss: %f,Valid Loss: %f, Train acc %f, Valid acc %f, "
                              % (
-                             e, train_loss / len(train_data), valid_loss / len(valid_data), train_acc / len(train_data),
-                             valid_acc))
+                                 e, train_loss / len(train_data), valid_loss / len(valid_data),
+                                 train_acc / len(train_data),
+                                 valid_acc))
             else:
                 epoch_str = ("Epoch %d. Train Loss: %f, Train acc %f, Valid acc %f, "
                              % (e, train_loss / len(train_data), train_acc / len(train_data), valid_acc))
@@ -361,56 +363,18 @@ if __name__ == '__main__':
         test_data = loader(test_ds, batch_size=batch_size, shuffle=False, last_batch='keep')
         # print('len valid data:', len(valid_data))
 
-    else:  # use only randomSizeClip
-        # print('input dir:',input_str)
-        # read original images, flag = 1 mean RGB
-        train_ds = vision.ImageFolderDataset(input_str + 'train', flag=1)
-        valid_ds = vision.ImageFolderDataset(input_str + 'valid', flag=1)
-        train_valid_ds = vision.ImageFolderDataset(input_str + 'train_valid', flag=1)
-        test_ds = vision.ImageFolderDataset(input_str + 'test', flag=1)
-
-        # data augmentation
-        transform_train, transform_test = enhanceDataFuc()
-
-        train_data = loader(train_ds.transform_first(transform_train), batch_size=batch_size, shuffle=True,
-                            last_batch='keep')
-
-        valid_data = loader(valid_ds.transform_first(transform_test), batch_size=batch_size, shuffle=True,
-                            last_batch='keep')
-        # print('len valid data:', len(valid_data))
-        # verify loss of valid data
-        # valid_test_data = loader(valid_ds.transform_first(transform_test),batch_size=batch_size,shuffle=False,last_batch='keep')
-
-        train_valid_data = loader(train_valid_ds.transform_first(transform_train), batch_size=batch_size, shuffle=True,
-                                  last_batch='keep')
-
-        test_data = loader(test_ds.transform_first(transform_test), batch_size=batch_size, shuffle=False,
-                           last_batch='keep')
-
     # 2.model and init
     ctx = utils1.try_gpu()
     net = getMyNet(ctx)
     # net = getResNet164_v2(ctx)
     # net = getWRN16_8(ctx)
     # net = getResNeXt18(ctx)
-    # valid_ratio = 0.1
-    # num_epochs = 220
-    # learning_rate = 0.1
-    # weight_decay = 0.0005
-    # lr_period = 40
-    # lr_decay = 0.2
 
     net.hybridize()
 
     # 3. loss and optimiz
     softmax_cross_entrory = mx.gluon.loss.SoftmaxCrossEntropyLoss()
 
-    # trainer = mx.gluon.Trainer(net.collect_params(),'sgd',{'learning_rate':lr,'momentum':0.9,'wd':wd})
-    ## check net
-    # x = nd.random_normal(shape=(4, 3, 32, 32), ctx=ctx)
-    # out = net(x)
-    # print(net.collect_params())
-    # print(net)
     preds = []
     num = 0
     if True:
@@ -433,38 +397,5 @@ if __name__ == '__main__':
         # df = pd.DataFrame({'id': sorted_ids, 'label': preds})
         # df['label'] = df['label'].apply(lambda x: train_valid_ds.synsets[x])
         # df.to_csv('./submissions_CIFAR/submission.csv', index=False)
-
-        print('---end---')
-        '''
-        ## valid data loss
-        valid_loss = 0
-        print('valid_data len',len(valid_data))
-        for valid_data, valid_label in valid_data:
-            valid_label = valid_label.astype('float32').as_in_context(ctx)
-            with autograd.predict_mode():
-                out = net(valid_data.as_in_context(ctx))
-                loss = softmax_cross_entrory(out,valid_label)
-            # valid_loss += nd.mean(loss).asscalar()
-            valid_loss = nd.mean(loss).asscalar()
-            # valid_loss_record.append(valid_loss)
-            print('valid loss:',valid_loss)
-        '''
-    else:  # product kaggle file
-
-        myTrain(net, batch_size, train_valid_data, None, num_epochs, learning_rate, weight_decay, ctx, lr_period,
-                lr_decay)
-
-        for data, label in test_data:
-            num += 1
-            if num % 100 == 0:
-                print('test data batch detect process:', num)
-            output = net(data.as_in_context(ctx))
-            preds.extend(nd.argmax(output, axis=1).astype(int).asnumpy())
-        sorted_ids = list(range(1, len(test_ds) + 1))
-        sorted_ids.sort(key=lambda x: str(x))
-
-        df = pd.DataFrame({'id': sorted_ids, 'label': preds})
-        df['label'] = df['label'].apply(lambda x: train_valid_ds.synsets[x])
-        df.to_csv('./submissions_CIFAR/submission.csv', index=False)
 
     print('end')

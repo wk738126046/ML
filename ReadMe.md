@@ -9,14 +9,14 @@
     learning_rate = 0.3
     weight_decay = 3.0
 
-##1.2 net   
+## 1.2 net   
 
      net.add(gluon.nn.Dense(128))
      net.add(gluon.nn.BatchNorm(),
              gluon.nn.Activation('relu'))
      net.add(gluon.nn.Dense(1))
 
-##2.1 secend param
+## 2.1 secend param
 
     k = 5
     epochs = 50
@@ -24,7 +24,7 @@
     learning_rate = 0.03
     weight_decay = 170
 
-##2.2 net
+## 2.2 net
 
     net.add(gluon.nn.Dense(1024, activation='relu'))
     net.add(gluon.nn.Dropout(0.5))
@@ -32,7 +32,7 @@
     
 ##3.1 CIFAR10 param
 
-###3.1.1 firts param( epoch 160 and use lr_decay )
+### 3.1.1 firts param( epoch 160 and use lr_decay )
    ```
     num_epochs = 300
     learning_rate = 0.1
@@ -41,7 +41,7 @@
     learning_rate = 0.1
     lr_decay = 0.5
 ``` 
-###3.1.1 secend param
+### 3.1.1 secend param
    ```
     num_epochs = 300
     learning_rate = 0.1
@@ -61,10 +61,10 @@ Epoch 299. Train Loss: 0.286618, Train acc 0.904632, Valid acc 0.933200, lr=0.00
           4) normalization 
 ```
 
-reference:
+#### reference:
 https://github.com/SinyerAtlantis/deep_learning_gluon/tree/master/2.%20cnn_cifar10
 
 https://github.com/yinglang/CIFAR10_mxnet
 
-### resnet164_v2 reference
+#### resnet164_v2 reference
 https://github.com/L1aoXingyu/cifar10-gluon
